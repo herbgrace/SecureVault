@@ -2,21 +2,25 @@ namespace SecureVault;
 
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 public static class VaultController
 {
     public static void showMenu(string username)
     {
+        // Ensure that public & private keys are generated
+        SecurityController.CheckRSAKeys();
         while (true)
         {   
             Console.WriteLine($"""
-            
             Welcome, {username}
             1. Change Password
             2. Add Entry
             3. List Entries
             4. View Entry's Password
             5. Delete Entry
-            6. Exit
+            6. Export Entries
+            7. Load Exported File
+            8. Exit
             """);
 
             switch (Console.ReadLine())
@@ -37,6 +41,12 @@ public static class VaultController
                     DeleteEntry(username);
                     break;
                 case "6":
+                    ExportEntries(username);
+                    break;
+                case "7":
+                    LoadExport(username);
+                    break;
+                case "8":
                     return;
                 default:
                     Console.WriteLine("Invalid option");
@@ -164,6 +174,7 @@ public static class VaultController
 
         Console.WriteLine($"Saved Password: {plainPass}");
     }
+
     private static void DeleteEntry(string username)
     {
         Console.Write("Enter the site you wish to delete: ");
@@ -183,5 +194,52 @@ public static class VaultController
         {
             Console.WriteLine("Error Occured When Removing Entry (Check Your Spelling of the Site)");
         }
+    }
+
+    private static void ExportEntries(string username)
+    {
+        var serializer = new JsonSerializerOptions { WriteIndented = true };
+        var contents = new Dictionary<string, string>();
+
+        var entries = FileController.LoadEntries(username) ?? new List<VaultEntry>();
+        var entriesString = JsonSerializer.Serialize(entries, serializer);
+
+        var signed = SecurityController.SignEntries(entriesString);
+        var signedString = Convert.ToBase64String(signed);
+        
+        contents.Add("data", entriesString);
+        contents.Add("signature", signedString);
+        contents.Add("exportedAt", DateTime.Now.ToString());
+        contents.Add("exportedBy", username);
+
+        var contentsString = JsonSerializer.Serialize(contents, serializer);
+        FileController.SaveExport(username, contentsString);
+        Console.WriteLine("Exported Entries Successfully");
+    }
+
+    private static void LoadExport(string username)
+    {
+        Console.Write("Enter the path to the import: ");
+        string path = Console.ReadLine() ?? "";
+
+        var export = FileController.LoadExport(path);
+
+        if (!SecurityController.VerifyImportSignature(export))
+        {
+            Console.WriteLine("Signature failed, unable to import entries.");
+            return;
+        }
+
+        Console.WriteLine("Signature succeeded. Importing entries");
+        var data = export["data"];
+        var entries = JsonSerializer.Deserialize<List<VaultEntry>>(data) ?? null;
+        if (entries == null)
+        {
+            Console.WriteLine("Error parsing entries.");
+            return;
+        }
+
+        FileController.MergeImport(username, entries);
+        Console.WriteLine("Successfully imported new entries.");
     }
 }

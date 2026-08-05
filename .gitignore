@@ -2,3 +2,5 @@ bin
 obj
 Models/users.json
 Models/vault.json
+Models/Keys/*
+Exports/*

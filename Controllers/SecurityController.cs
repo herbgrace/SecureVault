@@ -1,7 +1,10 @@
 namespace SecureVault;
 
 using System.Text;
+using System.Text.Json;
 using System.Security.Cryptography;
+using System.Text.Unicode;
+using System.Runtime.CompilerServices;
 
 public static class SecurityController
 {
@@ -67,5 +70,61 @@ public static class SecurityController
         using var result = new MemoryStream();
         cs.CopyTo(result);
         return result.ToArray();
+    }
+
+    public static void CheckRSAKeys()
+    {
+        // Both Public & Private Keys Exist
+        if (FileController.GetPrivateKey() != "" && FileController.GetPublicKey() != "")
+        {
+            return;
+        }
+
+        using var rsa = RSA.Create(2048);
+        string publicKey = rsa.ExportRSAPublicKeyPem();
+        string privateKey = rsa.ExportRSAPrivateKeyPem();
+        FileController.SaveRSAKeys(publicKey, privateKey);
+    }
+
+    public static byte[] SignEntries(string entries)
+    {
+        var entriesBytes = Encoding.UTF8.GetBytes(entries);
+        var privateKey = FileController.GetPrivateKey();
+
+        return RSASign(entriesBytes, privateKey);
+    }
+
+    public static bool VerifyImportSignature(Dictionary<string, string> import)
+    {
+        var dataBytes = Encoding.UTF8.GetBytes(import["data"]);
+        var sigBytes = Convert.FromBase64String(import["signature"]);
+
+        var publicKey = FileController.GetPublicKey();
+
+        return RSAVerify(dataBytes, sigBytes, publicKey);
+    }
+
+    private static byte[] RSASign(byte[] data, string privateKeyPem)
+    {
+        if (privateKeyPem == "")
+        {
+            return [];
+        }
+
+        using var rsa = RSA.Create();
+        rsa.ImportFromPem(privateKeyPem);
+        return rsa.SignData(data, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+    }
+
+    private static bool RSAVerify(byte[] data, byte[] signature, string publicKeyPem)
+    {
+        if (publicKeyPem == "")
+        {
+            return false;
+        }
+
+        using var rsa = RSA.Create();
+        rsa.ImportFromPem(publicKeyPem);
+        return rsa.VerifyData(data, signature, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
     }
 }

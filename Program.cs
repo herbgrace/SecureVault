@@ -4,7 +4,6 @@ using SecureVault;
 while (true)
 {
     Console.WriteLine("""
-    
     1. Register new user
     2. Login to existing user
     3. Exit

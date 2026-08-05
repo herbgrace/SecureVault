@@ -1,15 +1,27 @@
 namespace SecureVault;
 
+using System.ComponentModel.Design;
 using System.Text.Json;
+using System.Text.Unicode;
 
 public static class FileController
 {
     private const string USER_FILEPATH = "./Models/users.json";
     private const string VAULT_FILEPATH = "./Models/vault.json";
+    private const string PRIVATE_KEY_PATH = "./Models/Keys/private_key.pem";
+    private const string PUBLIC_KEY_PATH = "./Models/Keys/public_key.pem";
+    private const string BASE_EXPORT_PATH = "./Exports";
+
+    // Does the same thing as File.WriteAllText, but allows all file operations to be in this controller.
+    public static void SaveFile(string path, string? contents)
+    {
+        contents = contents == null ? "" : contents;
+        File.WriteAllText(path, contents);
+    }
 
     public static void SaveUsers(Dictionary<string, User> users)
     {
-        File.WriteAllText(USER_FILEPATH, JsonSerializer.Serialize(users, new JsonSerializerOptions { WriteIndented = true }));
+        SaveFile(USER_FILEPATH, JsonSerializer.Serialize(users, new JsonSerializerOptions { WriteIndented = true }));
     }
 
     public static Dictionary<string, User> LoadUsers()
@@ -46,7 +58,7 @@ public static class FileController
     {
         var vault = LoadVaultJSON();
         vault[username] = entries;
-        File.WriteAllText(VAULT_FILEPATH, JsonSerializer.Serialize(vault, new JsonSerializerOptions { WriteIndented = true }));
+        SaveFile(VAULT_FILEPATH, JsonSerializer.Serialize(vault, new JsonSerializerOptions { WriteIndented = true }));
     }
 
     public static bool RemoveEntry(string username, string site)
@@ -76,5 +88,68 @@ public static class FileController
             raw = "{}";
         }
         return JsonSerializer.Deserialize<Dictionary<string, List<VaultEntry>>>(raw) ?? new();
+    }
+
+    public static void MergeImport(string username, List<VaultEntry> entries)
+    {
+        var existing = LoadEntries(username) ?? new List<VaultEntry>();
+        foreach (var entry in entries)
+        {
+            // Doesn't exist in the system already
+            if (existing.Find(e => e.Id == entry.Id) == null)
+            {
+                existing.Add(entry);
+            }
+        }
+        SaveEntries(username, existing);
+    }
+
+    public static void SaveRSAKeys(string publicKey, string privateKey)
+    {
+        File.WriteAllText(PUBLIC_KEY_PATH, publicKey);
+        File.WriteAllText(PRIVATE_KEY_PATH, privateKey);
+    }
+
+    public static string GetPrivateKey()
+    {
+        if (!File.Exists(PRIVATE_KEY_PATH))
+        {
+            return "";
+        }
+        return File.ReadAllText(PRIVATE_KEY_PATH);
+    }
+
+    public static string GetPublicKey()
+    {
+        if (!File.Exists(PUBLIC_KEY_PATH))
+        {
+            return "";
+        }
+        return File.ReadAllText(PUBLIC_KEY_PATH);
+    }
+
+    public static void SaveExport(string username, string encryptedEntries)
+    {
+        int count = 0;
+        while (File.Exists($"{BASE_EXPORT_PATH}/{username}{count}.json"))
+        {
+            count++;
+        }
+
+        SaveFile($"{BASE_EXPORT_PATH}/{username}{count}.json", encryptedEntries);
+    }
+
+    public static Dictionary<string, string> LoadExport(string path)
+    {
+        if (!File.Exists(path))
+        {
+            return new();
+        }
+
+        var raw = File.ReadAllText(path);
+        if (raw == "") {
+            raw = "{}";
+        }
+        return JsonSerializer.Deserialize<Dictionary<string, string>>(raw) ?? new();
     }
 }
