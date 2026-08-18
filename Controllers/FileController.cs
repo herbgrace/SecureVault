@@ -128,7 +128,7 @@ public static class FileController
         return File.ReadAllText(PUBLIC_KEY_PATH);
     }
 
-    public static void SaveExport(string username, string encryptedEntries)
+    public static string SaveExport(string username, string encryptedEntries)
     {
         int count = 0;
         while (File.Exists($"{BASE_EXPORT_PATH}/{username}{count}.json"))
@@ -137,6 +137,7 @@ public static class FileController
         }
 
         SaveFile($"{BASE_EXPORT_PATH}/{username}{count}.json", encryptedEntries);
+        return $"{BASE_EXPORT_PATH}/{username}{count}.json";
     }
 
     public static Dictionary<string, string> LoadExport(string path)
@@ -151,5 +152,31 @@ public static class FileController
             raw = "{}";
         }
         return JsonSerializer.Deserialize<Dictionary<string, string>>(raw) ?? new();
+    }
+
+    public static void LoadEnv()
+    {
+        if (!File.Exists(".env"))
+        {
+            throw new FileNotFoundException("Env file not found, JWT and OAuth Functionality will not work.");
+        }
+
+        foreach (var line in File.ReadAllLines(".env"))
+        {
+            if (string.IsNullOrWhiteSpace(line) || line.StartsWith("#"))
+            {
+                continue;
+            }
+
+            var parts = line.Split('=', 2);
+            if (parts.Length != 2)
+            {
+                continue;
+            }
+
+            var key = parts[0].Trim();
+            var value = parts[1].Trim();
+            Environment.SetEnvironmentVariable(key, value);
+        } 
     }
 }

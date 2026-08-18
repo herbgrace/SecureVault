@@ -3,6 +3,7 @@ namespace SecureVault;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+
 public static class VaultController
 {
     public static void showMenu(string username)
@@ -47,6 +48,7 @@ public static class VaultController
                     LoadExport(username);
                     break;
                 case "8":
+                    SecurityController.ClearJWT();
                     return;
                 default:
                     Console.WriteLine("Invalid option");
@@ -57,6 +59,13 @@ public static class VaultController
 
     private static void ChangePassword(string username)
     {
+        var valid = SecurityController.ValidateJWT();
+
+        if (!valid.Item1)
+        {
+            DisplayJWTError(valid.Item2);
+            return;
+        }
         var existing = FileController.LoadUsers();
         var current = existing.GetValueOrDefault(username);
         if (current == null)
@@ -96,6 +105,12 @@ public static class VaultController
 
     private static void AddEntry(string username)
     {
+        var valid = SecurityController.ValidateJWT();
+        if (!valid.Item1)
+        {
+            DisplayJWTError(valid.Item2);
+            return;
+        }
         Console.Write("Enter your master password: ");
         var mPass = Console.ReadLine() ?? "";
         if (!SecurityController.IsCorrectPassword(username, mPass))
@@ -131,6 +146,12 @@ public static class VaultController
 
     private static void ListEntries(string username)
     {
+        var valid = SecurityController.ValidateJWT();
+        if (!valid.Item1)
+        {
+            DisplayJWTError(valid.Item2);
+            return;
+        }
         var entries = FileController.LoadEntries(username);
         if (entries == null)
         {
@@ -147,6 +168,12 @@ public static class VaultController
 
     private static void ViewEntryPassword(string username)
     {
+        var valid = SecurityController.ValidateJWT();
+        if (!valid.Item1)
+        {
+            DisplayJWTError(valid.Item2);
+            return;
+        }
         Console.Write("Enter your master password: ");
         string password = Console.ReadLine() ?? "";
 
@@ -177,6 +204,12 @@ public static class VaultController
 
     private static void DeleteEntry(string username)
     {
+        var valid = SecurityController.ValidateJWT();
+        if (!valid.Item1)
+        {
+            DisplayJWTError(valid.Item2);
+            return;
+        }
         Console.Write("Enter the site you wish to delete: ");
         var site = Console.ReadLine() ?? "";
 
@@ -198,6 +231,12 @@ public static class VaultController
 
     private static void ExportEntries(string username)
     {
+        var valid = SecurityController.ValidateJWT();
+        if (!valid.Item1)
+        {
+            DisplayJWTError(valid.Item2);
+            return;
+        }
         var serializer = new JsonSerializerOptions { WriteIndented = true };
         var contents = new Dictionary<string, string>();
 
@@ -213,12 +252,18 @@ public static class VaultController
         contents.Add("exportedBy", username);
 
         var contentsString = JsonSerializer.Serialize(contents, serializer);
-        FileController.SaveExport(username, contentsString);
-        Console.WriteLine("Exported Entries Successfully");
+        string location = FileController.SaveExport(username, contentsString);
+        Console.WriteLine($"Exported Entries Successfully to {location}");
     }
 
     private static void LoadExport(string username)
     {
+        var valid = SecurityController.ValidateJWT();
+        if (!valid.Item1)
+        {
+            DisplayJWTError(valid.Item2);
+            return;
+        }
         Console.Write("Enter the path to the import: ");
         string path = Console.ReadLine() ?? "";
 
@@ -241,5 +286,17 @@ public static class VaultController
 
         FileController.MergeImport(username, entries);
         Console.WriteLine("Successfully imported new entries.");
+    }
+
+    private static void DisplayJWTError(string error)
+    {
+        if (error.StartsWith("IDX10223")) {
+            Console.WriteLine("Session expired - please log in again");
+            return;
+        } else
+        {
+            // Can add logic for other errors, but fine to just print errors out for this app
+            Console.WriteLine(error);
+        }
     }
 }

@@ -1,12 +1,17 @@
-﻿using System.Security.Cryptography;
+﻿using System.ComponentModel;
+using System.Security.Cryptography;
+using Microsoft.VisualBasic;
 using SecureVault;
+
+FileController.LoadEnv();
 
 while (true)
 {
     Console.WriteLine("""
     1. Register new user
     2. Login to existing user
-    3. Exit
+    3. Login with Google
+    4. Exit
     """);
     switch(Console.ReadLine())
     {
@@ -17,6 +22,9 @@ while (true)
             loginUser();
             break;
         case "3":
+            await googleLogin();
+            break; 
+        case "4":
             return;
         default:
             Console.WriteLine("Invalid Input");
@@ -67,6 +75,36 @@ void loginUser()
         Console.WriteLine("Invalid Credentials");
         return;
     } 
+
+    SecurityController.CreateJWT(username, "Username/Password");
+    VaultController.showMenu(username);
+}
+
+async Task googleLogin()
+{
+    string? username = await SecurityController.OAuthLogin();
+    if (username == null)
+    {
+        Console.WriteLine("Unable to login with Google at this time, please try again later or contact a developer if the problem persists.");
+        return;
+    }
+
+    var existing = FileController.LoadUsers();
+    if (!existing.ContainsKey(username))
+    {
+        // User doesn't exist in the system, need to set a vault password
+        string password = "";
+        do 
+        {
+            Console.Write("Enter the master password you want to use for Secure Vault: ");
+            password = Console.ReadLine() ?? "";
+        } 
+        while (!SecurityController.PasswordFollowsConstraints(password));
+
+        string salt = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+        existing.Add(username, new User(salt, SecurityController.SaltedHash(salt, password)));
+        FileController.SaveUsers(existing);
+    }
 
     VaultController.showMenu(username);
 }

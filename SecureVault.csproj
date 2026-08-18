@@ -7,4 +7,13 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Google.Apis.Auth" Version="1.*" />
+    <PackageReference Include="Google.Apis.Oauth2.v2" Version="1.*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.*" />
+    <PackageReference Include="Microsoft.IdentityModel.Tokens" Version="8.*" />
+  </ItemGroup>
 </Project>

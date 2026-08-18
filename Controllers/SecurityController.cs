@@ -2,12 +2,27 @@ namespace SecureVault;
 
 using System.Text;
 using System.Text.Json;
-using System.Security.Cryptography;
 using System.Text.Unicode;
+using System.Security.Cryptography;
+using System.Security.Claims;
 using System.Runtime.CompilerServices;
+
+using Google.Apis.Auth.OAuth2;
+using Google.Apis.Oauth2.v2;
+using Google.Apis.Services;
+
+using System.IdentityModel.Tokens.Jwt;
+using Microsoft.IdentityModel.Tokens;
+using Google.Apis.Oauth2.v2.Data;
 
 public static class SecurityController
 {
+    private static string? savedToken;
+
+    private static SymmetricSecurityKey key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(Environment.GetEnvironmentVariable("VAULT_JWT_SECRET") ?? ""));
+    private static JwtSecurityTokenHandler handler = new JwtSecurityTokenHandler();
+    private static readonly string Issuer = "Secure Vault";
+    private static readonly string Audience = "Secure Vault Users";
     public static bool IsCorrectPassword(string username, string password)
     {
         var existing = FileController.LoadUsers();
@@ -102,6 +117,81 @@ public static class SecurityController
         var publicKey = FileController.GetPublicKey();
 
         return RSAVerify(dataBytes, sigBytes, publicKey);
+    }
+
+    public static async Task<string?> OAuthLogin()
+    {
+        var SecretFilePath = Environment.GetEnvironmentVariable("CLIENT_SECRET_PATH"); 
+        if (!File.Exists(SecretFilePath))
+        {
+            return null;
+        }
+
+        var secrets = GoogleClientSecrets.FromFile(SecretFilePath).Secrets;
+        var credential = await GoogleWebAuthorizationBroker.AuthorizeAsync(
+            secrets,
+            new[]
+            {
+                "https://www.googleapis.com/auth/userinfo.email",
+                "https://www.googleapis.com/auth/userinfo.profile"
+            },
+            "user",
+            CancellationToken.None
+        );
+
+        var oauth2Service = new Oauth2Service(new BaseClientService.Initializer
+        {
+            HttpClientInitializer = credential,
+            ApplicationName = "Secure Vault"
+        });
+
+        var userInfo = await oauth2Service.Userinfo.Get().ExecuteAsync();
+
+        CreateJWT(userInfo.Email, "OAuth");
+        return userInfo.Email;
+    }
+
+    public static void CreateJWT(string sub, string authMethod)
+    {
+        TimeSpan lifetime = TimeSpan.FromSeconds(1800); // 30 mins
+        var claims = new[] { 
+            new Claim("sub", sub), 
+            new Claim("authMethod", authMethod),
+            new Claim("iat", DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString()),
+        };
+
+        var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+        var jwtToken = new JwtSecurityToken(Issuer, Audience, claims,
+            expires: DateTime.UtcNow.Add(lifetime), signingCredentials: credentials);
+        
+        savedToken = handler.WriteToken(jwtToken);
+    }
+
+    public static void ClearJWT()
+    {
+        savedToken = null;
+    }
+
+    public static (bool, string, string?) ValidateJWT()
+    {
+        try
+        {
+            var resp = handler.ValidateToken(savedToken, new TokenValidationParameters
+            {
+                ValidateIssuer = true, ValidIssuer = Issuer,
+                ValidateAudience = true, ValidAudience = Audience,
+                ValidateLifetime = true,
+                ClockSkew = TimeSpan.Zero,
+                ValidAlgorithms = new[] { SecurityAlgorithms.HmacSha256 }, // prevents the alg:none attack
+                IssuerSigningKey = key
+            }, out _);
+            return (
+                    true, 
+                    resp.FindFirst("sub")?.Value ?? "Invalid Username",
+                    resp.FindFirst("authMethod")?.Value ?? "Invalid Auth Method"
+                );
+        }
+        catch (Exception ex) { return (false, ex.Message, null); }
     }
 
     private static byte[] RSASign(byte[] data, string privateKeyPem)

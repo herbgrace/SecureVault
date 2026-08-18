@@ -4,3 +4,5 @@ Models/users.json
 Models/vault.json
 Models/Keys/*
 Exports/*
+.env
+client_secret.json
