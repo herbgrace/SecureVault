@@ -185,6 +185,11 @@ public static class SecurityController
                 ValidAlgorithms = new[] { SecurityAlgorithms.HmacSha256 }, // prevents the alg:none attack
                 IssuerSigningKey = key
             }, out _);
+            // I Don't think it's possible for the response to be null, but checking just in case...
+            if (resp == null)
+            {
+                return (false, "Invalid JWT Token", null);
+            }
             return (
                     true, 
                     resp.FindFirst("sub")?.Value ?? "Invalid Username",
